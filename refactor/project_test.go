@@ -20,8 +20,8 @@ func TestProjectOverview(t *testing.T) {
 	if !result.Success {
 		t.Error("expected success")
 	}
-	if result.Module != "https://github.com/night-codes/gorefactor" {
-		t.Errorf("expected module https://github.com/night-codes/gorefactor, got %s", result.Module)
+	if result.Module != "github.com/night-codes/gorefactor" {
+		t.Errorf("expected module github.com/night-codes/gorefactor, got %s", result.Module)
 	}
 	if result.GoFiles < 5 {
 		t.Errorf("expected at least 5 go files, got %d", result.GoFiles)

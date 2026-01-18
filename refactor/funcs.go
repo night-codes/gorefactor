@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 type ReadFuncResult struct {
@@ -363,14 +364,21 @@ func ReadVarConst(name, file string) (*ReadVarConstResult, error) {
 						kind = "const"
 					}
 
+					var code string
+					if len(genDecl.Specs) == 1 {
+						code = formatNode(fset, genDecl)
+					} else {
+						code = kind + " " + formatNode(fset, valueSpec)
+					}
+
 					result := &ReadVarConstResult{
 						Success: true,
 						Name:    name,
 						Kind:    kind,
 						File:    file,
-						Line:    fset.Position(genDecl.Pos()).Line,
-						EndLine: fset.Position(genDecl.End()).Line,
-						Code:    formatNode(fset, genDecl),
+						Line:    fset.Position(valueSpec.Pos()).Line,
+						EndLine: fset.Position(valueSpec.End()).Line,
+						Code:    code,
 					}
 
 					if valueSpec.Type != nil {
@@ -413,17 +421,21 @@ func ReplaceVarConst(name, file string, newCode io.Reader) (*ModifyResult, error
 	}
 
 	var targetDecl *ast.GenDecl
+	var targetSpec *ast.ValueSpec
+	var specIndex int
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || (genDecl.Tok != token.VAR && genDecl.Tok != token.CONST) {
 			continue
 		}
 
-		for _, spec := range genDecl.Specs {
+		for i, spec := range genDecl.Specs {
 			if valueSpec, ok := spec.(*ast.ValueSpec); ok {
 				for _, ident := range valueSpec.Names {
 					if ident.Name == name {
 						targetDecl = genDecl
+						targetSpec = valueSpec
+						specIndex = i
 						break
 					}
 				}
@@ -431,7 +443,7 @@ func ReplaceVarConst(name, file string, newCode io.Reader) (*ModifyResult, error
 		}
 	}
 
-	if targetDecl == nil {
+	if targetDecl == nil || targetSpec == nil {
 		return nil, fmt.Errorf("var/const %s not found in %s", name, file)
 	}
 
@@ -439,14 +451,46 @@ func ReplaceVarConst(name, file string, newCode io.Reader) (*ModifyResult, error
 	if err != nil {
 		return nil, err
 	}
-
-	startPos := fset.Position(targetDecl.Pos()).Offset
-	endPos := fset.Position(targetDecl.End()).Offset
+	newCodeStr := strings.TrimSpace(string(newCodeBytes))
 
 	var result []byte
-	result = append(result, src[:startPos]...)
-	result = append(result, newCodeBytes...)
-	result = append(result, src[endPos:]...)
+
+	if len(targetDecl.Specs) == 1 {
+		startPos := fset.Position(targetDecl.Pos()).Offset
+		endPos := fset.Position(targetDecl.End()).Offset
+		result = append(result, src[:startPos]...)
+		result = append(result, newCodeStr...)
+		result = append(result, src[endPos:]...)
+	} else {
+		specStart := fset.Position(targetSpec.Pos()).Offset
+		specEnd := fset.Position(targetSpec.End()).Offset
+
+		isStandalone := strings.HasPrefix(newCodeStr, "const ") || strings.HasPrefix(newCodeStr, "var ")
+
+		if isStandalone {
+			if specIndex == 0 {
+				nextSpec := targetDecl.Specs[1]
+				specEnd = fset.Position(nextSpec.Pos()).Offset
+				for specEnd > 0 && (src[specEnd-1] == '\n' || src[specEnd-1] == '\t') {
+					specEnd--
+				}
+			} else {
+				for specStart > 0 && (src[specStart-1] == '\n' || src[specStart-1] == '\t') {
+					specStart--
+				}
+			}
+			endOfBlock := fset.Position(targetDecl.End()).Offset
+			result = append(result, src[:specStart]...)
+			result = append(result, src[specEnd:endOfBlock]...)
+			result = append(result, '\n')
+			result = append(result, newCodeStr...)
+			result = append(result, src[endOfBlock:]...)
+		} else {
+			result = append(result, src[:specStart]...)
+			result = append(result, newCodeStr...)
+			result = append(result, src[specEnd:]...)
+		}
+	}
 
 	formatted, err := formatSource(result)
 	if err != nil {

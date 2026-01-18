@@ -13,21 +13,23 @@ type User struct {
 	Age  int
 }
 
-type UserService struct {
-	db string
-	ns string
-}
+type UserService struct{}
 
 func (s *UserService) Create(name string) (*User, error) {
-	return &User{ID: 1, Name: name + "-"}, nil
-}
-
-func (s UserService) List() ([]*User, error) {
-	return nil, nil
+	return &User{ID: 1, Name: name}, nil
 }
 
 func (s *UserService) Delete(id int) error {
 	return nil
+}
+
+func (s UserService) List() ([]User, error) {
+	return nil, nil
+}
+
+type Config struct {
+	Host string
+	Port int
 }
 
 type Reader interface {
@@ -35,9 +37,10 @@ type Reader interface {
 }
 
 func ProcessOrder(id int) error {
+	helper()
 	return nil
 }
 
-func helper() string {
-	return "internal"
+func helper() {
+	// internal
 }

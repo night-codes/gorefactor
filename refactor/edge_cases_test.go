@@ -128,10 +128,10 @@ func TestContextVariousScopes(t *testing.T) {
 		wantFunc  string
 	}{
 		{"package line", 1, "package", ""},
-		{"const", 3, "const", ""},
-		{"var", 5, "var", ""},
-		{"type", 8, "type", ""},
-		{"func body", 35, "func_body", "ProcessOrder"},
+		{"const", 4, "const", ""},
+		{"var", 8, "var", ""},
+		{"type", 10, "type", ""},
+		{"func body", 40, "func_body", "ProcessOrder"},
 	}
 
 	for _, tt := range tests {

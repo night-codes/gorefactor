@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -73,6 +74,32 @@ func main() {
 		}
 		result, err = refactor.Read(args[0], file)
 
+
+	case "grep":
+		if len(args) < 1 {
+			fatal("usage: gorefactor grep <pattern> [dir] [-i] [-r] [-f <filepattern>]")
+		}
+		dir := "."
+		opts := &refactor.GrepOptions{}
+		pattern := args[0]
+		for i := 1; i < len(args); i++ {
+			switch args[i] {
+			case "-i":
+				opts.IgnoreCase = true
+			case "-r":
+				opts.Regex = true
+			case "-f":
+				if i+1 < len(args) {
+					opts.FilePattern = args[i+1]
+					i++
+				}
+			default:
+				if !strings.HasPrefix(args[i], "-") {
+					dir = args[i]
+				}
+			}
+		}
+		result, err = refactor.Grep(pattern, dir, opts)
 	// === Modify code ===
 	case "replace":
 		if len(args) < 1 {
@@ -102,9 +129,52 @@ func main() {
 
 	case "move":
 		if len(args) < 2 {
-			fatal("usage: gorefactor move <name> <target.go>")
+			fatal("usage: gorefactor move <n> <target.go>")
 		}
 		result, err = refactor.Move(args[0], args[1])
+
+	// === Lines ===
+	case "lines":
+		if len(args) < 1 {
+			fatal("usage: gorefactor lines <file:N:M> or <file:N>")
+		}
+		file, start, end, e := refactor.ParseLineRange(args[0])
+		if e != nil {
+			fatal(e.Error())
+		}
+		result, err = refactor.ReadLines(file, start, end)
+
+	case "replace-lines":
+		if len(args) < 1 {
+			fatal("usage: gorefactor replace-lines <file:N:M> < newcontent")
+		}
+		file, start, end, e := refactor.ParseLineRange(args[0])
+		if e != nil {
+			fatal(e.Error())
+		}
+		content, _ := io.ReadAll(os.Stdin)
+		result, err = refactor.ReplaceLines(file, start, end, strings.TrimSuffix(string(content), "\n"))
+
+	case "delete-lines":
+		if len(args) < 1 {
+			fatal("usage: gorefactor delete-lines <file:N:M>")
+		}
+		file, start, end, e := refactor.ParseLineRange(args[0])
+		if e != nil {
+			fatal(e.Error())
+		}
+		result, err = refactor.DeleteLines(file, start, end)
+
+	case "insert-lines":
+		if len(args) < 1 {
+			fatal("usage: gorefactor insert-lines <file:N> < newcontent")
+		}
+		file, after, _, e := refactor.ParseLineRange(args[0])
+		if e != nil {
+			fatal(e.Error())
+		}
+		content, _ := io.ReadAll(os.Stdin)
+		result, err = refactor.InsertLines(file, after, strings.TrimSuffix(string(content), "\n"))
 
 	// === Navigation (gopls) ===
 	case "definition":
@@ -204,12 +274,19 @@ PROJECT
 FIND & READ
   find <name> [dir]       Find symbol (func, type, var, const, field)
   read <name> [file]      Read code of function or type
+  grep <pattern> [dir] Search text in project (-i ignore case, -r regex)
 
 MODIFY (pipe new code via stdin: echo 'code' | gorefactor ...)
   replace <name> [file]    Replace symbol with new code
   delete <name> [file]     Delete symbol
   add <file>               Append code to file
   move <name> <dst>        Move symbol to another file in same package
+
+LINES (raw line operations, file:N or file:N:M format)
+  lines <file:N:M>          Read lines N to M (or single line N)
+  replace-lines <file:N:M>  Replace lines N-M with stdin
+  delete-lines <file:N:M>   Delete lines N-M
+  insert-lines <file:N>     Insert stdin after line N
 
 NAVIGATION (gopls)
   definition <symbol>     Where symbol is defined
